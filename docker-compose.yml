@@ -9,8 +9,6 @@ services:
       - ollama_data:/root/.ollama
     restart: unless-stopped
 
-
-
   ollama-webui:
     image: ghcr.io/open-webui/open-webui:main
     container_name: ollama-webui
