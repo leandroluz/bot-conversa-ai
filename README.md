@@ -81,6 +81,7 @@ Antes de iniciar, certifique-se de ter instalado:
 git clone https://github.com/leandroluz/bot-conversa-ai.git
 cd bot-conversa-ai 
 ```
+---
 
 ## ▶️ Subindo os Containers
 
@@ -98,6 +99,8 @@ n8n (orquestração)
 PostgreSQL (banco de dados)
 
 Open WebUI (interface opcional)
+
+---
 
 ## 🧠 Instalação do Modelo LLM (OBRIGATÓRIO)
 
@@ -119,9 +122,13 @@ armazená-lo de forma persistente no volume do Ollama
 
 disponibilizá-lo para uso pelo n8n, Open WebUI e API
 
+---
+
 ## ⚠️ Importante
 O projeto não baixa modelos automaticamente durante o build
 para evitar imagens Docker muito grandes e demoradas.
+
+---
 
 ## ✔️ Verificação do Modelo (Opcional)
 
@@ -136,3 +143,5 @@ Saída esperada:
 
 NAME         SIZE
 phi3:latest  2.2 GB
+
+---
