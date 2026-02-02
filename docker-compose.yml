@@ -54,6 +54,25 @@ services:
       - ollama
     restart: unless-stopped
 
+  adianti:
+    build:
+      context: ./admin-panel
+      dockerfile: Dockerfile
+    container_name: adianti_app
+    environment:
+      DATABASE_HOST: postgres
+      DATABASE_NAME: atendente
+      DATABASE_USER: atendente
+      DATABASE_PASSWORD: atendente123
+    volumes:
+      - ./admin-panel:/var/www/html
+      - ./admin-panel/php/php.ini:/usr/local/etc/php/php.ini
+    ports:
+      - "8081:80"
+    depends_on:
+      - postgres
+    restart: unless-stopped
+
 
 volumes:
   ollama_data:

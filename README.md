@@ -100,7 +100,32 @@ PostgreSQL (banco de dados)
 
 Open WebUI (interface opcional)
 
----
+Painel Administrativo (Adianti)
+
+--- 
+
+## 🧰 Painel Administrativo (Adianti)
+
+O painel Adianti foi incorporado ao projeto em `admin-panel/` e usa o **mesmo PostgreSQL**
+do serviço principal (banco `atendente`). Portanto, **não use** o `docker-compose.yml`
+interno do `admin-panel`.
+
+### 🌐 Acesso
+Após subir os containers, acesse:
+
+```
+http://localhost:8081
+```
+
+### 🧱 Inicialização do banco do Adianti
+O Adianti precisa de algumas tabelas base. Para inicializar, rode:
+
+```bash
+for f in admin-panel/app/database/*.sql; do
+  docker exec -i postgres psql -U atendente -d atendente < "$f"
+done
+```
+
 
 ## 🧠 Instalação do Modelo LLM (OBRIGATÓRIO)
 
