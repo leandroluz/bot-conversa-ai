@@ -79,14 +79,15 @@ Antes de iniciar, certifique-se de ter instalado:
 
 ```bash
 git clone https://github.com/leandroluz/bot-conversa-ai.git
-cd bot-conversa-ai
+cd bot-conversa-ai 
+```
 
 ## ▶️ Subindo os Containers
 
 Execute o comando abaixo para iniciar todos os serviços:
-
+```bash
 docker compose up -d
-
+```
 
 Isso irá iniciar:
 
@@ -105,8 +106,10 @@ utilizado pelo Ollama.
 
 Execute uma única vez:
 
+```bash
 docker exec -it ollama ollama pull phi3
 
+```
 
 Esse comando irá:
 
@@ -124,8 +127,10 @@ para evitar imagens Docker muito grandes e demoradas.
 
 Para confirmar que o modelo foi instalado corretamente:
 
-docker exec -it ollama ollama list
+```bash
 
+docker exec -it ollama ollama list
+```
 
 Saída esperada:
 
