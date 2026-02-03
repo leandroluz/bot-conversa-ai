@@ -1,0 +1,12 @@
+# Usar a imagem oficial do PostgreSQL
+FROM postgres:17
+
+# Definir variáveis de ambiente (mude conforme necessário)
+ENV POSTGRES_DB=atendente
+ENV POSTGRES_USER=atendente
+ENV POSTGRES_PASSWORD=atendente123
+
+# Scripts SQL serão montados via bind mount em docker-compose.yml
+
+# Expor a porta padrão do PostgreSQL
+EXPOSE 5432

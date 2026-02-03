@@ -109,6 +109,9 @@ Painel Administrativo (Adianti)
 O painel Adianti foi incorporado ao projeto em `admin-panel/` e usa o **mesmo PostgreSQL**
 do serviço principal (banco `atendente`). Portanto, **não use** o `docker-compose.yml`
 interno do `admin-panel`.
+Os Dockerfiles do Adianti ficam na raiz do projeto (`Dockerfile.adianti` e `Dockerfile.adianti-db`).
+O `docker-compose.adianti.yml` original foi preservado apenas como referência.
+O `Dockerfile.adianti-db` foi mantido apenas como referência e não é usado neste compose.
 
 ### 🌐 Acesso
 Após subir os containers, acesse:

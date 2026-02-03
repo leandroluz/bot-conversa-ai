@@ -9,9 +9,9 @@ services:
       - ollama_data:/root/.ollama
     restart: unless-stopped
 
-  ollama-webui:
+  webui:
     image: ghcr.io/open-webui/open-webui:main
-    container_name: ollama-webui
+    container_name: webui
     ports:
       - "3000:8080"
     environment:
@@ -21,14 +21,17 @@ services:
     restart: unless-stopped
 
   postgres:
-    image: postgres:15
     container_name: postgres
+    build:
+      context: .
+      dockerfile: Dockerfile.adianti-db
     environment:
       POSTGRES_DB: atendente
       POSTGRES_USER: atendente
       POSTGRES_PASSWORD: atendente123
     volumes:
-      - pg_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql/data
+      - ./admin-panel/app/database:/docker-entrypoint-initdb.d:ro  # Copia os arquivos SQL para inicialização do PostgreSQL
     ports:
       - "5432:5432"
     restart: unless-stopped
@@ -57,8 +60,8 @@ services:
   adianti:
     build:
       context: ./admin-panel
-      dockerfile: Dockerfile
-    container_name: adianti_app
+      dockerfile: ../Dockerfile.adianti
+    container_name: adianti
     environment:
       DATABASE_HOST: postgres
       DATABASE_NAME: atendente
@@ -72,9 +75,23 @@ services:
     depends_on:
       - postgres
     restart: unless-stopped
-
-
+  pgadmin:
+    image: dpage/pgadmin4:9.10.0
+    container_name: pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@admin.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_CONFIG_SERVER_MODE: "True"
+    ports:
+      - "5050:80"  # Acessível via http://localhost:5050
+    depends_on:
+      - postgres
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+      - ./servers.json:/pgadmin4/servers.json  # Montar o arquivo de configuração
 volumes:
+  postgres_data:
+  pgadmin_data:  # Definição do volume que estava faltando
   ollama_data:
   pg_data:
   n8n_data:
