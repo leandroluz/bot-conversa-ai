@@ -7,7 +7,7 @@
  */
 class AppSession extends TRecord
 {
-    const TABLENAME  = 'app_session';
+    const TABLENAME  = 'app.app_session';
     const PRIMARYKEY = 'id';
     const IDPOLICY   = 'uuid'; // {uuid, serial, max}
 

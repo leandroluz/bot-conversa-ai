@@ -7,7 +7,7 @@
  */
 class AppMensagem extends TRecord
 {
-    const TABLENAME  = 'app_mensagem';
+    const TABLENAME  = 'app.app_mensagem';
     const PRIMARYKEY = 'id';
     const IDPOLICY   = 'uuid'; // {uuid, serial, max}
 
