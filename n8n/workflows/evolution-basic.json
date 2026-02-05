@@ -1,0 +1,76 @@
+{
+  "name": "Evolution Basic Webhook",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "teste-evolution",
+        "options": {}
+      },
+      "id": "Webhook",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        220,
+        300
+      ],
+      "webhookId": "evolution-basic-webhook"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Basic normalization of Evolution payload\nconst body = $json;\n\nconst event = body.event || body?.data?.event || body?.type || 'unknown';\nconst from = body?.data?.key?.remoteJid || body?.data?.from || body?.from || 'unknown';\nconst text = body?.data?.message?.conversation || body?.data?.message?.extendedTextMessage?.text || body?.message?.text || '';\n\nreturn [{\n  json: {\n    event,\n    from,\n    text,\n    raw: body\n  }\n}];"
+      },
+      "id": "Normalize",
+      "name": "Normalize",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 2,
+      "position": [
+        460,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"ok\": true,\n  \"event\": $json.event,\n  \"from\": $json.from,\n  \"text\": $json.text\n}"
+      },
+      "id": "Respond",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        700,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize": {
+      "main": [
+        [
+          {
+            "node": "Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true
+  }
+}
