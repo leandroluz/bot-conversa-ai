@@ -82,6 +82,20 @@
               </menuitem>
         </menu>
     </menuitem>
+
+    <menuitem label='Contatos'>
+        <icon>fas:address-book fa-fw</icon>
+        <menu>
+            <menuitem label='Listar Contatos'>
+                <icon>fas:list fa-fw</icon>
+                <action>AppContatoList</action>
+            </menuitem>
+            <menuitem label='Novo Contato'>
+                <icon>fas:plus fa-fw</icon>
+                <action>AppContatoForm</action>
+            </menuitem>
+        </menu>
+    </menuitem>
         
     <menuitem label='Common pages'>
         <menu>
