@@ -1,0 +1,15 @@
+{
+    "Servers": {
+        "1": {
+            "Name": "PostgreSQL",
+            "Group": "Servers",
+            "Host": "atendente",
+            "Port": 5432,
+            "MaintenanceDB": "adianti",
+            "Username": "admin",
+            "Password": "admin",
+            "SSLMode": "prefer",
+            "ConnectNow": true
+        }
+    }
+}
