@@ -5,7 +5,7 @@ CREATE TABLE IF NOT EXISTS app_contato (
     nome VARCHAR(150) NOT NULL,
     telefone VARCHAR(30) NOT NULL,
     foto_url TEXT,
-    criado_em TIMESTAMP NOT NULL DEFAULT NOW()
+    criado_em TIMESTAMP DEFAULT NOW()
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS app_contato_telefone_idx ON app_contato (telefone);

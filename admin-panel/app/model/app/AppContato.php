@@ -7,7 +7,7 @@
  */
 class AppContato extends TRecord
 {
-    const TABLENAME  = 'app_contato';
+    const TABLENAME  = 'app.app_contato';
     const PRIMARYKEY = 'id';
     const IDPOLICY   = 'uuid'; // {uuid, serial, max}
 

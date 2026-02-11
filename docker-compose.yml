@@ -51,6 +51,9 @@ services:
       - N8N_BASIC_AUTH_ACTIVE=true
       - N8N_BASIC_AUTH_USER=admin
       - N8N_BASIC_AUTH_PASSWORD=admin
+      - EVOLUTION_API_BASE_URL=http://evolution-api:8080
+      - EVOLUTION_API_KEY=change-me
+      - EVOLUTION_INSTANCE=YOUR_INSTANCE
     volumes:
       - n8n_data:/home/node/.n8n
     depends_on:
@@ -62,13 +65,23 @@ services:
     image: evoapicloud/evolution-api:v2.3.6
     container_name: evolution_api
     ports:
-      - "8080:8080"
+      - "8090:8080"
     env_file:
       - ./evolution-api.env
     volumes:
       - evolution_instances:/evolution/instances
     depends_on:
       - n8n
+      - redis
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
     restart: unless-stopped
 
   adianti:
@@ -110,3 +123,4 @@ volumes:
   pg_data:
   n8n_data:
   evolution_instances:
+  redis_data:

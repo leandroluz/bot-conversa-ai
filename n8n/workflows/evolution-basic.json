@@ -11,21 +11,49 @@
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 1,
       "position": [
-        220,
+        200,
         300
       ],
       "webhookId": "evolution-basic-webhook"
     },
     {
       "parameters": {
-        "functionCode": "// Basic normalization of Evolution payload\nconst body = $json;\n\nconst event = body.event || body?.data?.event || body?.type || 'unknown';\nconst from = body?.data?.key?.remoteJid || body?.data?.from || body?.from || 'unknown';\nconst text = body?.data?.message?.conversation || body?.data?.message?.extendedTextMessage?.text || body?.message?.text || '';\n\nreturn [{\n  json: {\n    event,\n    from,\n    text,\n    raw: body\n  }\n}];"
+        "language": "javascript",
+        "code": "// Basic normalization of Evolution payload\nconst body = $json || {};\nconst data = body.data || body;\nconst key = data.key || {};\n\nconst rawEvent = body.event || data.event || body.type || '';\nconst event = String(rawEvent).toUpperCase().replace('.', '_');\n\nconst remoteJid = key.remoteJid || data.from || body.from || '';\nconst isGroup = typeof remoteJid === 'string' && remoteJid.includes('@g.us');\nconst fromMe = key.fromMe === true || data.fromMe === true;\n\nconst msg = data.message || {};\nconst text = msg.conversation || msg.extendedTextMessage?.text || msg.ephemeralMessage?.message?.conversation || msg.ephemeralMessage?.message?.extendedTextMessage?.text || data.text || '';\n\nconst phone = String(remoteJid || '').replace(/@.*$/, '').replace(/\\D/g, '');\nconst instance = body.instance?.instanceName || body.instance?.name || body.instanceName || data.instanceName || body.instance || '';\n\nreturn [{\n  json: {\n    event,\n    from: remoteJid || data.from || body.from || 'unknown',\n    text,\n    phone,\n    isGroup,\n    fromMe,\n    instance,\n    raw: body\n  }\n}];\n"
       },
       "id": "Normalize",
       "name": "Normalize",
-      "type": "n8n-nodes-base.function",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        440,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "instance",
+              "value": "={{$json.instance || $env.EVOLUTION_INSTANCE || 'YOUR_INSTANCE'}}"
+            },
+            {
+              "name": "reply_text",
+              "value": "Ola! Recebemos sua mensagem e ja vamos responder."
+            }
+          ]
+        },
+        "options": {
+          "keepOnlySet": false
+        }
+      },
+      "id": "Set",
+      "name": "Set",
+      "type": "n8n-nodes-base.set",
       "typeVersion": 2,
       "position": [
-        460,
+        660,
         300
       ]
     },
@@ -39,8 +67,150 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
       "position": [
-        700,
+        900,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.event}}",
+              "operation": "equals",
+              "value2": "MESSAGES_UPSERT"
+            },
+            {
+              "value1": "={{$json.text}}",
+              "operation": "isNotEmpty"
+            },
+            {
+              "value1": "={{$json.phone}}",
+              "operation": "isNotEmpty"
+            }
+          ],
+          "boolean": [
+            {
+              "value1": "={{$json.fromMe}}",
+              "operation": "isFalse"
+            },
+            {
+              "value1": "={{$json.isGroup}}",
+              "operation": "isFalse"
+            }
+          ]
+        }
+      },
+      "id": "If",
+      "name": "If",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        900,
         300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH contato AS (\n  INSERT INTO app.app_contato (nome, telefone)\n  VALUES ('WhatsApp', $1)\n  ON CONFLICT (telefone) DO UPDATE SET telefone = EXCLUDED.telefone\n  RETURNING id\n),\ncontato_sel AS (\n  SELECT id FROM contato\n  UNION ALL\n  SELECT id FROM app.app_contato WHERE telefone = $1 LIMIT 1\n),\nsess AS (\n  INSERT INTO app.app_session (contato_id, canal, identificador_externo)\n  SELECT id, 'whatsapp', $1 FROM contato_sel\n  WHERE NOT EXISTS (\n    SELECT 1 FROM app.app_session s\n    JOIN contato_sel c ON s.contato_id = c.id\n    WHERE s.canal='whatsapp' AND s.identificador_externo=$1\n  )\n  RETURNING id, contato_id\n),\nsess_sel AS (\n  SELECT id, contato_id FROM sess\n  UNION ALL\n  SELECT s.id, s.contato_id FROM app.app_session s\n  JOIN contato_sel c ON s.contato_id = c.id\n  WHERE s.canal='whatsapp' AND s.identificador_externo=$1\n  LIMIT 1\n)\nINSERT INTO app.app_mensagem (session_id, contato_id, remetente, mensagem)\nSELECT id, contato_id, 'usuario', $2 FROM sess_sel;",
+        "values": "={{[$json.phone, $json.text]}}"
+      },
+      "id": "InsertUser",
+      "name": "InsertUser",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{($env.EVOLUTION_API_BASE_URL || 'http://evolution-api:8080') + '/message/sendText/' + $json.instance}}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"number\": $json.phone,\n  \"text\": $json.reply_text\n}",
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "apikey",
+              "value": "={{$env.EVOLUTION_API_KEY || 'change-me'}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        }
+      },
+      "id": "SendReply",
+      "name": "SendReply",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1340,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH contato AS (\n  INSERT INTO app.app_contato (nome, telefone)\n  VALUES ('WhatsApp', $1)\n  ON CONFLICT (telefone) DO UPDATE SET telefone = EXCLUDED.telefone\n  RETURNING id\n),\ncontato_sel AS (\n  SELECT id FROM contato\n  UNION ALL\n  SELECT id FROM app.app_contato WHERE telefone = $1 LIMIT 1\n),\nsess AS (\n  INSERT INTO app.app_session (contato_id, canal, identificador_externo)\n  SELECT id, 'whatsapp', $1 FROM contato_sel\n  WHERE NOT EXISTS (\n    SELECT 1 FROM app.app_session s\n    JOIN contato_sel c ON s.contato_id = c.id\n    WHERE s.canal='whatsapp' AND s.identificador_externo=$1\n  )\n  RETURNING id, contato_id\n),\nsess_sel AS (\n  SELECT id, contato_id FROM sess\n  UNION ALL\n  SELECT s.id, s.contato_id FROM app.app_session s\n  JOIN contato_sel c ON s.contato_id = c.id\n  WHERE s.canal='whatsapp' AND s.identificador_externo=$1\n  LIMIT 1\n)\nINSERT INTO app.app_mensagem (session_id, contato_id, remetente, mensagem)\nSELECT id, contato_id, 'assistente', $2 FROM sess_sel;",
+        "values": "={{[$json.phone, $json.reply_text]}}"
+      },
+      "id": "InsertAssistant",
+      "name": "InsertAssistant",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [
+        1560,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{($env.EVOLUTION_API_BASE_URL || 'http://evolution-api:8080') + '/chat/fetchProfilePictureUrl/' + $json.instance}}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"number\": $json.phone\n}",
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "apikey",
+              "value": "={{$env.EVOLUTION_API_KEY || 'change-me'}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        }
+      },
+      "id": "FetchPhoto",
+      "name": "FetchPhoto",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1320,
+        140
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE app.app_contato SET foto_url = $2 WHERE telefone = $1;",
+        "values": "={{[$json.phone, $json.profilePictureUrl || $json.profilepictureurl || $json.profile_picture_url || $json.profilePictureUrl]}}"
+      },
+      "id": "UpdatePhoto",
+      "name": "UpdatePhoto",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [
+        1520,
+        140
       ]
     }
   ],
@@ -60,7 +230,79 @@
       "main": [
         [
           {
+            "node": "Set",
+            "type": "main",
+            "index": 0
+          },
+          {
             "node": "Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "InsertUser",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "InsertUser": {
+      "main": [
+        [
+          {
+            "node": "FetchPhoto",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SendReply": {
+      "main": [
+        [
+          {
+            "node": "InsertAssistant",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "FetchPhoto": {
+      "main": [
+        [
+          {
+            "node": "UpdatePhoto",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "UpdatePhoto": {
+      "main": [
+        [
+          {
+            "node": "SendReply",
             "type": "main",
             "index": 0
           }
