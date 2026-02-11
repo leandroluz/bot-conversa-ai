@@ -56,6 +56,9 @@ services:
       - EVOLUTION_INSTANCE=YOUR_INSTANCE
     volumes:
       - n8n_data:/home/node/.n8n
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
     depends_on:
       - postgres
       - ollama
@@ -70,6 +73,9 @@ services:
       - ./evolution-api.env
     volumes:
       - evolution_instances:/evolution/instances
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
     depends_on:
       - n8n
       - redis
