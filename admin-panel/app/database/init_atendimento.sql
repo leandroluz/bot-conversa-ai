@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS app_contato (
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS app_contato_telefone_idx ON app_contato (telefone);
+ADD CONSTRAINT app_contato_telefone_uk UNIQUE (telefone);
 
 CREATE TABLE IF NOT EXISTS app_session (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
