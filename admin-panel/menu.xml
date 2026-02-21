@@ -94,6 +94,10 @@
                 <icon>fas:plus fa-fw</icon>
                 <action>AppContatoForm</action>
             </menuitem>
+            <menuitem label='Listar Mensagens'>
+                <icon>fas:comments fa-fw</icon>
+                <action>AppMensagemList</action>
+            </menuitem>
         </menu>
     </menuitem>
         
