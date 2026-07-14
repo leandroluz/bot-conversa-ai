@@ -1,8 +1,8 @@
 # bot-conversa-ai 🤖💬
 
-O **bot-conversa-ai** é uma plataforma local de atendimento com Inteligência Artificial,
+O **bot-conversa-ai** é uma plataforma self-hosted de atendimento automatizado,
 voltada para conversas institucionais via múltiplos canais (como WhatsApp e Telegram),
-utilizando **LLMs open-source rodando localmente**, com foco em controle, segurança e rastreabilidade.
+com foco em controle, segurança e rastreabilidade.
 
 O projeto foi concebido para ambientes que exigem **autonomia tecnológica**, **auditoria** e
 **execução local**, como órgãos públicos, instituições e ambientes corporativos.
@@ -16,14 +16,13 @@ O projeto foi concebido para ambientes que exigem **autonomia tecnológica**, **
 - Orientar usuários de forma clara e padronizada
 - Encaminhar demandas para atendimento humano quando necessário
 - Registrar conversas para fins administrativos e auditoria
-- Operar **sem dependência de APIs externas**
+- Permitir integração modular com provedores de IA quando necessário
 
 ---
 
 ## 🧠 Características Principais
 
-- Execução **100% local / self-hosted**
-- Uso de **LLMs open-source** via Ollama
+- Execução **self-hosted**
 - Orquestração de fluxos com **n8n**
 - Persistência de dados em **PostgreSQL**
 - Interface administrativa via **PHP (Adianti Framework)**
@@ -39,9 +38,7 @@ Usuário
 ↓
 Canal de Entrada (Webhook / WhatsApp / Telegram)
 ↓
-n8n (orquestração e regras)
-↓
-Ollama (LLM local)
+n8n (orquestração, FAQ e integrações)
 ↓
 Resposta ao usuário
 ↓
@@ -56,11 +53,10 @@ Painel Administrativo
 ## 🚀 Stack Tecnológica
 
 - Docker / Docker Compose
-- Ollama (LLM local)
-- Modelo LLM: **phi3**
 - n8n (workflow e automação)
 - PostgreSQL (persistência e auditoria)
-- Open WebUI (interface opcional para testes do Ollama)
+- Evolution API (integração com WhatsApp)
+- Redis (infraestrutura da Evolution API)
 - PHP + Adianti Framework (gestão administrativa)
 
 ---
@@ -90,17 +86,8 @@ Execute o comando abaixo para iniciar todos os serviços:
 docker compose up -d
 ```
 
-Isso irá iniciar:
-
-Ollama (LLM local)
-
-n8n (orquestração)
-
-PostgreSQL (banco de dados)
-
-Open WebUI (interface opcional)
-
-Painel Administrativo (Adianti)
+Isso irá iniciar n8n, PostgreSQL, Evolution API, Redis, pgAdmin e o painel
+administrativo Adianti.
 
 --- 
 
@@ -130,46 +117,108 @@ done
 ```
 
 
-## 🧠 Instalação do Modelo LLM (OBRIGATÓRIO)
+## Teste Rápido: Bot de Atendimento Simples
 
-Após subir os containers, é necessário baixar manualmente o modelo LLM
-utilizado pelo Ollama.
+Se a ideia e validar a estrutura antes de ligar RAG/LLM, use o fluxo simples baseado em FAQ e palavras-chave.
 
-Execute uma única vez:
+### O que foi deixado pronto
 
-```bash
-docker exec -it ollama ollama pull phi3
+- Seed SQL idempotente em `admin-panel/app/database/110_seed_simple_bot.sql`
+- Workflow n8n em `n8n/workflows/evolution-simple-atendimento.json`
+- Bot de exemplo com a instancia `teste-atendimento`
 
-```
+### Seed de exemplo
 
-Esse comando irá:
+Em banco novo, o seed entra automaticamente porque a pasta `admin-panel/app/database/` ja esta montada no PostgreSQL.
 
-baixar o modelo phi3
-
-armazená-lo de forma persistente no volume do Ollama
-
-disponibilizá-lo para uso pelo n8n, Open WebUI e API
-
----
-
-## ⚠️ Importante
-O projeto não baixa modelos automaticamente durante o build
-para evitar imagens Docker muito grandes e demoradas.
-
----
-
-## ✔️ Verificação do Modelo (Opcional)
-
-Para confirmar que o modelo foi instalado corretamente:
+Se o banco ja existia, rode manualmente:
 
 ```bash
-
-docker exec -it ollama ollama list
+docker exec -i postgres psql -U atendente -d atendente < admin-panel/app/database/110_seed_simple_bot.sql
 ```
 
-Saída esperada:
+### Importar workflow
 
-NAME         SIZE
-phi3:latest  2.2 GB
+No n8n (`http://localhost:5678`):
 
----
+1. Importe `n8n/workflows/evolution-simple-atendimento.json`
+2. Configure o node Postgres apontando para:
+   - host: `postgres`
+   - database: `atendente`
+   - user: `atendente`
+   - password: `atendente123`
+3. Ative o workflow
+
+### Como testar
+
+1. Crie ou conecte na Evolution uma instancia chamada `teste-atendimento`
+2. Configure o webhook dessa instancia para o endpoint do n8n:
+
+```text
+http://n8n:5678/webhook/evolution-simple-atendimento
+```
+
+3. Envie mensagens como:
+   - `oi`
+   - `qual o horario?`
+   - `endereco`
+   - `documentos`
+   - `atendente`
+
+As conversas ficam gravadas em `app.app_mensagem` e o bot pode ser ajustado pelo painel Adianti.
+
+## 🧠 Bot com Agente de Inteligência Artificial
+
+O workflow de agente é mantido como referência, mas seu nó de modelo ainda aponta
+para Ollama. Como Ollama não faz mais parte da infraestrutura, substitua esse nó pelo
+provedor de IA escolhido antes de importar ou ativar o workflow.
+
+### O que foi deixado pronto
+
+- Workflow n8n em `n8n/workflows/evolution-ai-agent.json` (documentação detalhada em `n8n/workflows/evolution-ai-agent.md`)
+
+### Importar workflow
+
+No n8n (`http://localhost:5678`):
+
+1. Importe o arquivo `n8n/workflows/evolution-ai-agent.json`.
+2. Configure o node **Postgres** apontando para o seu banco:
+   - host: `postgres`
+   - database: `atendente`
+   - user: `atendente`
+   - password: `atendente123`
+3. Ative o workflow.
+
+### Como testar
+
+1. Crie ou conecte na Evolution uma instância (ex.: `teste-atendimento`).
+2. Configure o webhook dessa instância para enviar eventos `MESSAGES_UPSERT` para o endpoint:
+
+```text
+http://n8n:5678/webhook/evolution-ai-agent
+```
+
+3. Após configurar um provedor compatível, envie uma pergunta para validar o fluxo.
+   As mensagens também serão registradas em `app.app_mensagem`.
+
+## Túnel ngrok para Telegram local
+
+Para testar webhook do Telegram com n8n local, suba o serviço `ngrok` (profile `tunnel`):
+
+```bash
+cp .env.ngrok.example .env
+# edite o arquivo .env e preencha NGROK_AUTHTOKEN
+docker compose --profile tunnel up -d ngrok
+```
+
+Ver URL pública gerada:
+
+```bash
+curl -s http://localhost:4040/api/tunnels | jq -r '.tunnels[] | select(.proto=="https") | .public_url'
+```
+
+Exemplo de webhook para workflow Telegram:
+
+```text
+https://SEU_SUBDOMINIO.ngrok-free.app/webhook/telegram-rag-bot-modular/<TELEGRAM_BOT_TOKEN>
+```

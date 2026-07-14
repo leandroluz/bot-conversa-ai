@@ -6,6 +6,11 @@ ENV POSTGRES_DB=atendente
 ENV POSTGRES_USER=atendente
 ENV POSTGRES_PASSWORD=atendente123
 
+# Instala pgvector para PostgreSQL 17
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends postgresql-17-pgvector \
+    && rm -rf /var/lib/apt/lists/*
+
 # Scripts SQL serão montados via bind mount em docker-compose.yml
 
 # Expor a porta padrão do PostgreSQL

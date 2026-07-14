@@ -1,0 +1,246 @@
+{
+  "name": "Evolution Simple Atendimento",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "evolution-simple-atendimento",
+        "options": {}
+      },
+      "id": "Webhook",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        200,
+        300
+      ],
+      "webhookId": "evolution-simple-atendimento"
+    },
+    {
+      "parameters": {
+        "language": "javascript",
+        "code": "// Normaliza o payload vindo da Evolution API\nconst body = $json || {};\nconst data = body.data || body;\nconst key = data.key || {};\n\n// Garante acesso seguro às variáveis de ambiente caso $env não esteja disponível\nconst env = typeof $env !== 'undefined' ? $env : {};\n\nconst rawEvent = body.event || data.event || body.type || '';\nconst event = String(rawEvent).toUpperCase().replace('.', '_');\nconst remoteJid = key.remoteJid || data.from || body.from || '';\nconst isGroup = typeof remoteJid === 'string' && remoteJid.includes('@g.us');\nconst fromMe = key.fromMe === true || data.fromMe === true;\nconst msg = data.message || {};\n\n// Detecta mídias específicas no payload da Evolution API / Baileys\nconst isImage = !!(msg.imageMessage || msg.ephemeralMessage?.message?.imageMessage || data.messageType === 'imageMessage');\nconst isDocument = !!(msg.documentMessage || msg.ephemeralMessage?.message?.documentMessage || data.messageType === 'documentMessage');\nconst isAudio = !!(msg.audioMessage || msg.ephemeralMessage?.message?.audioMessage || data.messageType === 'audioMessage');\nconst isVideo = !!(msg.videoMessage || msg.ephemeralMessage?.message?.videoMessage || data.messageType === 'videoMessage');\nconst isSticker = !!(msg.stickerMessage || msg.ephemeralMessage?.message?.stickerMessage || data.messageType === 'stickerMessage');\nconst isMedia = isImage || isDocument || isAudio || isVideo || isSticker;\n\nlet textRaw = msg.conversation || msg.extendedTextMessage?.text || msg.ephemeralMessage?.message?.conversation || msg.ephemeralMessage?.message?.extendedTextMessage?.text || data.text || '';\n\nif (!textRaw && isMedia) {\n  if (isImage) textRaw = '[Imagem]';\n  else if (isDocument) textRaw = '[Documento/PDF]';\n  else if (isAudio) textRaw = '[Áudio]';\n  else if (isVideo) textRaw = '[Vídeo]';\n  else if (isSticker) textRaw = '[Sticker]';\n  else textRaw = '[Mídia]';\n}\n\nconst textInput = String(textRaw || '').trim();\nconst phone = String(remoteJid || '').replace(/@.*$/, '').replace(/\\D/g, '');\nconst instance = body.instance?.instanceName || body.instance?.name || body.instanceName || data.instanceName || body.instance || env.EVOLUTION_INSTANCE || 'teste-atendimento';\n\n// Modo de auto-teste: permite processar mensagens fromMe apenas para um numero e com prefixo.\nconst selfTestPhone = String(env.WA_SELF_TEST_PHONE || env.SELF_TEST_PHONE || '').replace(/\\D/g, '');\nconst selfTestPrefix = String(env.WA_SELF_TEST_PREFIX || '/bot ').toLowerCase();\nconst textLower = textInput.toLowerCase();\n\nconst isSelfTestPhone = selfTestPhone !== '' && phone === selfTestPhone;\nconst hasSelfPrefix = selfTestPrefix !== '' && textLower.startsWith(selfTestPrefix);\nconst allowSelfTest = fromMe && isSelfTestPhone && hasSelfPrefix;\n\nconst text = allowSelfTest\n  ? textInput.slice(selfTestPrefix.length).trim()\n  : textInput;\n\nconst shouldProcess = event === 'MESSAGES_UPSERT'\n  && !isGroup\n  && phone !== ''\n  && text !== ''\n  && (!fromMe || allowSelfTest);\n\nreturn [{\n  json: {\n    event,\n    from: remoteJid || data.from || body.from || 'unknown',\n    text,\n    text_raw: textInput,\n    phone,\n    isGroup,\n    fromMe,\n    is_self_test: allowSelfTest,\n    should_process: shouldProcess,\n    is_media: isMedia,\n    is_image: isImage,\n    is_document: isDocument,\n    instance,\n    raw: body\n  }\n}];"
+      },
+      "id": "Normalize",
+      "name": "Normalize",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        440,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {\n  ok: true,\n  event: $json.event || null,\n  from: $json.from || null,\n  instance: $json.instance || null\n} }}"
+      },
+      "id": "Respond",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        680,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.should_process}}",
+              "operation": "isTrue"
+            }
+          ]
+        }
+      },
+      "id": "If",
+      "name": "If",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        680,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH bot_row AS (\n    SELECT b.id,\n           b.nome,\n           b.evolution_instance,\n           b.instrucoes\n      FROM app.app_bot b\n     WHERE lower(b.evolution_instance) = lower($1)\n       AND b.ativo = 'Y'\n     ORDER BY b.atualizado_em DESC\n     LIMIT 1\n)\nSELECT $1 AS instance,\n       $2 AS text,\n       $3 AS phone,\n       COALESCE(\n         (SELECT row_to_json(bot_row) FROM bot_row),\n         json_build_object(\n           'id', NULL,\n           'nome', 'Bot Atendimento',\n           'evolution_instance', $1,\n           'instrucoes', 'Bot simples de atendimento'\n         )\n       ) AS bot,\n       COALESCE(\n         (\n           SELECT json_agg(row_to_json(action_row) ORDER BY action_row.ordem)\n             FROM (\n               SELECT a.id,\n                      a.nome,\n                      a.tipo,\n                      a.gatilho,\n                      a.resposta_fixa,\n                      a.ordem\n                 FROM app.app_bot_action a\n                 JOIN bot_row b ON b.id = a.app_bot_id\n                WHERE a.ativo = 'Y'\n                ORDER BY a.ordem ASC, a.nome ASC\n             ) action_row\n         ),\n         '[]'::json\n       ) AS actions,\n       COALESCE(\n         (\n           SELECT json_agg(row_to_json(faq_row) ORDER BY faq_row.ordem)\n             FROM (\n               SELECT f.id,\n                      f.pergunta,\n                      f.resposta,\n                      f.palavras_chave,\n                      f.ordem\n                 FROM app.app_bot_faq f\n                 JOIN bot_row b ON b.id = f.app_bot_id\n                WHERE f.ativo = 'Y'\n                ORDER BY f.ordem ASC, f.pergunta ASC\n             ) faq_row\n         ),\n         '[]'::json\n       ) AS faqs;",
+        "values": "={{[$json.instance, $json.text, $json.phone]}}"
+      },
+      "id": "LoadKnowledge",
+      "name": "LoadKnowledge",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [
+        920,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "language": "javascript",
+        "code": "const parseMaybe = (value, fallback) => {\n  if (value === null || value === undefined) return fallback;\n  if (typeof value === 'string') {\n    try {\n      return JSON.parse(value);\n    } catch {\n      return fallback;\n    }\n  }\n  return value;\n};\n\nconst normalize = (value = '') => String(value)\n  .normalize('NFD')\n  .replace(/[\\u0300-\\u036f]/g, '')\n  .toLowerCase()\n  .replace(/[^\\p{L}\\p{N}\\s]/gu, ' ')\n  .replace(/\\s+/g, ' ')\n  .trim();\n\nconst scoreMatch = (text, source) => {\n  const normalizedSource = normalize(source);\n  if (!normalizedSource) return 0;\n\n  const phrases = normalizedSource\n    .split(/[;,|\\n]/)\n    .map((item) => item.trim())\n    .filter(Boolean);\n\n  let best = 0;\n\n  for (const phrase of phrases) {\n    if (text === phrase) {\n      best = Math.max(best, 100);\n      continue;\n    }\n\n    if (text.includes(phrase)) {\n      best = Math.max(best, 80 + Math.min(phrase.split(' ').length, 5));\n      continue;\n    }\n\n    const tokens = phrase.split(' ').filter((token) => token.length > 1);\n    if (!tokens.length) continue;\n\n    const matched = tokens.filter((token) => text.includes(token)).length;\n    if (matched === tokens.length) {\n      best = Math.max(best, 60 + matched);\n    } else if (matched > 0) {\n      best = Math.max(best, 20 + matched);\n    }\n  }\n\n  return best;\n};\n\nconst text = $json.text || '';\nconst phone = $json.phone || '';\nconst instance = $json.instance || $env.EVOLUTION_INSTANCE || 'teste-atendimento';\nconst textNorm = normalize(text);\nconst bot = parseMaybe($json.bot, {});\nconst actions = parseMaybe($json.actions, []);\nconst faqs = parseMaybe($json.faqs, []);\n\n// Verifica se veio do nó Normalize indicando mídia\nconst isMedia = $node[\"Normalize\"].json.is_media === true;\n\nlet winner = null;\n\nif (!isMedia) {\n  for (const action of actions) {\n    const score = scoreMatch(textNorm, action.gatilho || action.nome || '');\n    if (!winner || score > winner.score) {\n      winner = {\n        score,\n        type: 'action',\n        item: action,\n      };\n    }\n  }\n\n  for (const faq of faqs) {\n    const score = Math.max(\n      scoreMatch(textNorm, faq.palavras_chave || ''),\n      scoreMatch(textNorm, faq.pergunta || '')\n    );\n\n    if (!winner || score > winner.score) {\n      winner = {\n        score,\n        type: 'faq',\n        item: faq,\n      };\n    }\n  }\n}\n\nlet reply = '';\nlet matchedType = 'fallback';\nlet matchedId = null;\n\nif (isMedia) {\n  matchedType = 'media_warning';\n  reply = \"Desculpe, sou um assistente virtual e no momento só consigo responder a mensagens de texto. Por favor, envie sua dúvida por texto escrito.\";\n} else if (winner && winner.score >= 25) {\n  matchedType = winner.type;\n  matchedId = winner.item.id || null;\n  reply = winner.type === 'action'\n    ? (winner.item.resposta_fixa || '')\n    : (winner.item.resposta || '');\n}\n\nif (!reply) {\n  const faqHints = faqs\n    .slice(0, 3)\n    .map((faq) => '- ' + faq.pergunta)\n    .join('\\n');\n\n  reply = [\n    `Ola! Sou ${bot.nome || 'o bot de atendimento'}.`,\n    faqHints ? 'Posso ajudar com:\\n' + faqHints : 'Posso ajudar com horario, endereco, documentos e encaminhamento para atendente.',\n    'Escreva sua duvida com poucas palavras ou digite atendente.'\n  ].join('\\n\\n');\n}\n\nreturn [{\n  json: {\n    phone,\n    text,\n    instance,\n    bot,\n    matched_type: matchedType,\n    matched_id: matchedId,\n    reply_text: reply\n  }\n}];"
+      },
+      "id": "DecideReply",
+      "name": "DecideReply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        1160,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH contato AS (\n  INSERT INTO app.app_contato (nome, telefone)\n  VALUES ('WhatsApp', $1)\n  ON CONFLICT (telefone) DO UPDATE SET telefone = EXCLUDED.telefone\n  RETURNING id\n),\ncontato_sel AS (\n  SELECT id FROM contato\n  UNION ALL\n  SELECT id FROM app.app_contato WHERE telefone = $1 LIMIT 1\n),\nsess AS (\n  INSERT INTO app.app_session (contato_id, canal, identificador_externo)\n  SELECT id, 'whatsapp', $1 FROM contato_sel\n  WHERE NOT EXISTS (\n    SELECT 1 FROM app.app_session s\n    JOIN contato_sel c ON s.contato_id = c.id\n    WHERE s.canal='whatsapp' AND s.identificador_externo=$1\n  )\n  RETURNING id, contato_id\n),\nsess_sel AS (\n  SELECT id, contato_id FROM sess\n  UNION ALL\n  SELECT s.id, s.contato_id FROM app.app_session s\n  JOIN contato_sel c ON s.contato_id = c.id\n  WHERE s.canal='whatsapp' AND s.identificador_externo=$1\n  LIMIT 1\n)\nINSERT INTO app.app_mensagem (session_id, contato_id, remetente, mensagem)\nSELECT id, contato_id, 'usuario', $2 FROM sess_sel;",
+        "values": "={{[$json.phone, $json.text]}}"
+      },
+      "id": "InsertUser",
+      "name": "InsertUser",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [
+        1400,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{($env.EVOLUTION_API_BASE_URL || 'http://evolution-api:8080') + '/message/sendText/' + $node['DecideReply'].json.instance}}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"number\": $node[\"DecideReply\"].json.phone,\n  \"text\": $node[\"DecideReply\"].json.reply_text\n}",
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "apikey",
+              "value": "={{$env.EVOLUTION_API_KEY || 'change-me'}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        }
+      },
+      "id": "SendReply",
+      "name": "SendReply",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1640,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH contato AS (\n  INSERT INTO app.app_contato (nome, telefone)\n  VALUES ('WhatsApp', $1)\n  ON CONFLICT (telefone) DO UPDATE SET telefone = EXCLUDED.telefone\n  RETURNING id\n),\ncontato_sel AS (\n  SELECT id FROM contato\n  UNION ALL\n  SELECT id FROM app.app_contato WHERE telefone = $1 LIMIT 1\n),\nsess AS (\n  INSERT INTO app.app_session (contato_id, canal, identificador_externo)\n  SELECT id, 'whatsapp', $1 FROM contato_sel\n  WHERE NOT EXISTS (\n    SELECT 1 FROM app.app_session s\n    JOIN contato_sel c ON s.contato_id = c.id\n    WHERE s.canal='whatsapp' AND s.identificador_externo=$1\n  )\n  RETURNING id, contato_id\n),\nsess_sel AS (\n  SELECT id, contato_id FROM sess\n  UNION ALL\n  SELECT s.id, s.contato_id FROM app.app_session s\n  JOIN contato_sel c ON s.contato_id = c.id\n  WHERE s.canal='whatsapp' AND s.identificador_externo=$1\n  LIMIT 1\n)\nINSERT INTO app.app_mensagem (session_id, contato_id, remetente, mensagem)\nSELECT id, contato_id, 'assistente', $2 FROM sess_sel;",
+        "values": "={{[$node['DecideReply'].json.phone, $node['DecideReply'].json.reply_text]}}"
+      },
+      "id": "InsertAssistant",
+      "name": "InsertAssistant",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [
+        1880,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize": {
+      "main": [
+        [
+          {
+            "node": "Respond",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "LoadKnowledge",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "LoadKnowledge": {
+      "main": [
+        [
+          {
+            "node": "DecideReply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DecideReply": {
+      "main": [
+        [
+          {
+            "node": "InsertUser",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "InsertUser": {
+      "main": [
+        [
+          {
+            "node": "SendReply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SendReply": {
+      "main": [
+        [
+          {
+            "node": "InsertAssistant",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true
+  }
+}

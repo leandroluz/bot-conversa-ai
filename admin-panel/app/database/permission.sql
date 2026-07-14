@@ -374,3 +374,80 @@ CREATE INDEX sys_user_role_role_idx ON system_user_role(system_role_id);
 CREATE INDEX sys_user_old_password_user_idx ON system_user_old_password(system_user_id);
 CREATE INDEX sys_program_method_role_program_idx ON system_program_method_role(system_program_id);
 CREATE INDEX sys_program_method_role_role_idx ON system_program_method_role(system_role_id);
+
+--- Bot Atendimento programs
+INSERT INTO system_program (id, name, controller)
+SELECT (SELECT coalesce(max(id),0)+1 FROM system_program b), 'App Bot List', 'AppBotList'
+WHERE NOT EXISTS (SELECT 1 FROM system_program WHERE controller = 'AppBotList');
+
+INSERT INTO system_program (id, name, controller)
+SELECT (SELECT coalesce(max(id),0)+1 FROM system_program b), 'App Bot Form', 'AppBotForm'
+WHERE NOT EXISTS (SELECT 1 FROM system_program WHERE controller = 'AppBotForm');
+
+INSERT INTO system_program (id, name, controller)
+SELECT (SELECT coalesce(max(id),0)+1 FROM system_program b), 'App Bot FAQ List', 'AppBotFaqList'
+WHERE NOT EXISTS (SELECT 1 FROM system_program WHERE controller = 'AppBotFaqList');
+
+INSERT INTO system_program (id, name, controller)
+SELECT (SELECT coalesce(max(id),0)+1 FROM system_program b), 'App Bot FAQ Form', 'AppBotFaqForm'
+WHERE NOT EXISTS (SELECT 1 FROM system_program WHERE controller = 'AppBotFaqForm');
+
+INSERT INTO system_program (id, name, controller)
+SELECT (SELECT coalesce(max(id),0)+1 FROM system_program b), 'App Bot Connect Form', 'AppBotConnectForm'
+WHERE NOT EXISTS (SELECT 1 FROM system_program WHERE controller = 'AppBotConnectForm');
+
+--- Group access: Template - Admin (1)
+INSERT INTO system_group_program (id, system_group_id, system_program_id)
+SELECT (SELECT coalesce(max(id),0)+1 FROM system_group_program b), 1, p.id
+FROM system_program p
+WHERE p.controller = 'AppBotList'
+  AND NOT EXISTS (
+      SELECT 1
+      FROM system_group_program gp
+      WHERE gp.system_group_id = 1
+        AND gp.system_program_id = p.id
+  );
+
+INSERT INTO system_group_program (id, system_group_id, system_program_id)
+SELECT (SELECT coalesce(max(id),0)+1 FROM system_group_program b), 1, p.id
+FROM system_program p
+WHERE p.controller = 'AppBotForm'
+  AND NOT EXISTS (
+      SELECT 1
+      FROM system_group_program gp
+      WHERE gp.system_group_id = 1
+        AND gp.system_program_id = p.id
+  );
+
+INSERT INTO system_group_program (id, system_group_id, system_program_id)
+SELECT (SELECT coalesce(max(id),0)+1 FROM system_group_program b), 1, p.id
+FROM system_program p
+WHERE p.controller = 'AppBotFaqList'
+  AND NOT EXISTS (
+      SELECT 1
+      FROM system_group_program gp
+      WHERE gp.system_group_id = 1
+        AND gp.system_program_id = p.id
+  );
+
+INSERT INTO system_group_program (id, system_group_id, system_program_id)
+SELECT (SELECT coalesce(max(id),0)+1 FROM system_group_program b), 1, p.id
+FROM system_program p
+WHERE p.controller = 'AppBotFaqForm'
+  AND NOT EXISTS (
+      SELECT 1
+      FROM system_group_program gp
+      WHERE gp.system_group_id = 1
+        AND gp.system_program_id = p.id
+  );
+
+INSERT INTO system_group_program (id, system_group_id, system_program_id)
+SELECT (SELECT coalesce(max(id),0)+1 FROM system_group_program b), 1, p.id
+FROM system_program p
+WHERE p.controller = 'AppBotConnectForm'
+  AND NOT EXISTS (
+      SELECT 1
+      FROM system_group_program gp
+      WHERE gp.system_group_id = 1
+        AND gp.system_program_id = p.id
+  );

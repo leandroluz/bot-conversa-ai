@@ -1,33 +1,6 @@
+-- Migration idempotente para recurso de Bots por unidade
+
 SET search_path TO app;
-
-CREATE TABLE IF NOT EXISTS app_contato (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    nome VARCHAR(150) NOT NULL,
-    telefone VARCHAR(30) NOT NULL,
-    foto_url TEXT,
-    criado_em TIMESTAMP DEFAULT NOW()
-);
-
-CREATE UNIQUE INDEX IF NOT EXISTS app_contato_telefone_idx ON app_contato (telefone);
-
-CREATE TABLE IF NOT EXISTS app_session (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    contato_id UUID REFERENCES app_contato(id) ON DELETE SET NULL,
-    canal VARCHAR(50) NOT NULL DEFAULT 'n8n',
-    identificador_externo VARCHAR(100), -- ex: telefone, whatsapp_id, etc.
-    criado_em TIMESTAMP NOT NULL DEFAULT NOW()
-);
-
-CREATE TABLE IF NOT EXISTS app_mensagem (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    session_id UUID NOT NULL REFERENCES app_session(id) ON DELETE CASCADE,
-    contato_id UUID REFERENCES app_contato(id) ON DELETE SET NULL,
-    remetente VARCHAR(20) NOT NULL CHECK (remetente IN ('usuario', 'assistente')),
-    mensagem TEXT NOT NULL,
-    criado_em TIMESTAMP NOT NULL DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS app_mensagem_contato_idx ON app_mensagem (contato_id);
 
 CREATE TABLE IF NOT EXISTS app_bot (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -48,10 +21,11 @@ CREATE TABLE IF NOT EXISTS app_bot (
     atualizado_em TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS app_bot_unit_idx ON app_bot (system_unit_id);
-CREATE INDEX IF NOT EXISTS app_bot_nome_idx ON app_bot (nome);
 ALTER TABLE app.app_bot
     ADD COLUMN IF NOT EXISTS evolution_instance_id VARCHAR(120);
+
+CREATE INDEX IF NOT EXISTS app_bot_unit_idx ON app_bot (system_unit_id);
+CREATE INDEX IF NOT EXISTS app_bot_nome_idx ON app_bot (nome);
 
 CREATE TABLE IF NOT EXISTS app_bot_faq (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -121,4 +95,52 @@ BEGIN
             v_vector_schema
         );
     END IF;
+END $$;
+
+SET search_path TO adianti;
+
+INSERT INTO system_program (id, name, controller)
+SELECT (SELECT coalesce(max(id),0)+1 FROM system_program b), 'App Bot List', 'AppBotList'
+WHERE EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema='adianti' AND table_name='system_program')
+  AND NOT EXISTS (SELECT 1 FROM system_program WHERE controller = 'AppBotList');
+
+INSERT INTO system_program (id, name, controller)
+SELECT (SELECT coalesce(max(id),0)+1 FROM system_program b), 'App Bot Form', 'AppBotForm'
+WHERE EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema='adianti' AND table_name='system_program')
+  AND NOT EXISTS (SELECT 1 FROM system_program WHERE controller = 'AppBotForm');
+
+INSERT INTO system_program (id, name, controller)
+SELECT (SELECT coalesce(max(id),0)+1 FROM system_program b), 'App Bot FAQ List', 'AppBotFaqList'
+WHERE EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema='adianti' AND table_name='system_program')
+  AND NOT EXISTS (SELECT 1 FROM system_program WHERE controller = 'AppBotFaqList');
+
+INSERT INTO system_program (id, name, controller)
+SELECT (SELECT coalesce(max(id),0)+1 FROM system_program b), 'App Bot FAQ Form', 'AppBotFaqForm'
+WHERE EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema='adianti' AND table_name='system_program')
+  AND NOT EXISTS (SELECT 1 FROM system_program WHERE controller = 'AppBotFaqForm');
+
+INSERT INTO system_program (id, name, controller)
+SELECT (SELECT coalesce(max(id),0)+1 FROM system_program b), 'App Bot Connect Form', 'AppBotConnectForm'
+WHERE EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema='adianti' AND table_name='system_program')
+  AND NOT EXISTS (SELECT 1 FROM system_program WHERE controller = 'AppBotConnectForm');
+
+DO $$
+DECLARE
+    v_program_id INT;
+BEGIN
+    FOR v_program_id IN
+        SELECT p.id
+        FROM system_program p
+        WHERE p.controller IN ('AppBotList', 'AppBotForm', 'AppBotFaqList', 'AppBotFaqForm', 'AppBotConnectForm')
+    LOOP
+        IF NOT EXISTS (
+            SELECT 1
+            FROM system_group_program gp
+            WHERE gp.system_group_id = 1
+              AND gp.system_program_id = v_program_id
+        ) THEN
+            INSERT INTO system_group_program (id, system_group_id, system_program_id)
+            VALUES ( (SELECT coalesce(max(id),0)+1 FROM system_group_program b), 1, v_program_id );
+        END IF;
+    END LOOP;
 END $$;
