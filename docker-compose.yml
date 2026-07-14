@@ -1,25 +1,5 @@
 services:
 
-  ollama:
-    image: ollama/ollama:latest
-    container_name: ollama
-    ports:
-      - "11434:11434"
-    volumes:
-      - ollama_data:/root/.ollama
-    restart: unless-stopped
-
-  webui:
-    image: ghcr.io/open-webui/open-webui:main
-    container_name: webui
-    ports:
-      - "3000:8080"
-    environment:
-      - OLLAMA_BASE_URL=http://ollama:11434
-    depends_on:
-      - ollama
-    restart: unless-stopped
-
   postgres:
     container_name: postgres
     build:
@@ -34,7 +14,6 @@ services:
       - ./admin-panel/app/database:/docker-entrypoint-initdb.d:ro  # Copia os arquivos SQL para inicialização do PostgreSQL
     ports:
       - "5432:5432"
-    restart: unless-stopped
 
   n8n:
     image: n8nio/n8n:latest
@@ -48,38 +27,64 @@ services:
       - DB_POSTGRESDB_USER=n8n
       - DB_POSTGRESDB_PASSWORD=n8n123
       - DB_POSTGRESDB_SCHEMA=n8n
+      - WEBHOOK_URL=${N8N_WEBHOOK_URL:-http://n8n:5678}
+      - N8N_EDITOR_BASE_URL=${N8N_EDITOR_BASE_URL:-http://localhost:5678}
+      - N8N_HOST=${N8N_HOST:-0.0.0.0}
+      - N8N_PROTOCOL=http
       - N8N_BASIC_AUTH_ACTIVE=true
       - N8N_BASIC_AUTH_USER=admin
       - N8N_BASIC_AUTH_PASSWORD=admin
       - EVOLUTION_API_BASE_URL=http://evolution-api:8080
       - EVOLUTION_API_KEY=change-me
       - EVOLUTION_INSTANCE=YOUR_INSTANCE
+      - ADIANTI_REST_URL=http://adianti/rest.php
+      - RAG_TOP_K=5
+      - RAG_MIN_SIMILARITY=0.75
+      - WA_SELF_TEST_PHONE=5515998485006
+      - WA_SELF_TEST_PREFIX=/bot
+
     volumes:
       - n8n_data:/home/node/.n8n
-    dns:
-      - 1.1.1.1
-      - 8.8.8.8
+      - ./n8n/workflows:/home/node/.n8n/workflows:ro
     depends_on:
       - postgres
-      - ollama
-    restart: unless-stopped
+
+  ngrok:
+    image: ngrok/ngrok:latest
+    container_name: ngrok
+    command: http --log=stdout n8n:5678
+    environment:
+      - NGROK_AUTHTOKEN=${NGROK_AUTHTOKEN:-}
+    ports:
+      - "4040:4040"
+    depends_on:
+      - n8n
+    profiles:
+      - tunnel
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: cloudflared
+    command: tunnel --no-autoupdate --url http://n8n:5678
+    depends_on:
+      - n8n
+    profiles:
+      - tunnel
 
   evolution-api:
-    image: evoapicloud/evolution-api:v2.3.6
-    container_name: evolution_api
+    image: evoapicloud/evolution-api:latest
+    container_name: evolution-api
     ports:
       - "8090:8080"
     env_file:
       - ./evolution-api.env
+    environment:
+      - WEBHOOK_GLOBAL_URL=http://n8n:5678/webhook/evolution-ai-agent
     volumes:
       - evolution_instances:/evolution/instances
-    dns:
-      - 1.1.1.1
-      - 8.8.8.8
     depends_on:
       - n8n
       - redis
-    restart: unless-stopped
 
   redis:
     image: redis:7-alpine
@@ -88,7 +93,6 @@ services:
       - "6379:6379"
     volumes:
       - redis_data:/data
-    restart: unless-stopped
 
   adianti:
     build:
@@ -100,6 +104,8 @@ services:
       DATABASE_NAME: atendente
       DATABASE_USER: atendente
       DATABASE_PASSWORD: atendente123
+      EVOLUTION_API_BASE_URL: http://evolution-api:8080
+      EVOLUTION_API_KEY: change-me
     volumes:
       - ./admin-panel:/var/www/html
       - ./admin-panel/php/php.ini:/usr/local/etc/php/php.ini
@@ -107,7 +113,7 @@ services:
       - "8081:80"
     depends_on:
       - postgres
-    restart: unless-stopped
+
   pgadmin:
     image: dpage/pgadmin4:latest
     container_name: pgadmin
@@ -125,7 +131,6 @@ services:
 volumes:
   postgres_data:
   pgadmin_data:  # Definição do volume que estava faltando
-  ollama_data:
   pg_data:
   n8n_data:
   evolution_instances:
