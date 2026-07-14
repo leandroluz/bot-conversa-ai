@@ -1,0 +1,308 @@
+{
+  "name": "Evolution AI Agent",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "evolution-ai-agent",
+        "options": {}
+      },
+      "id": "Webhook",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        200,
+        300
+      ],
+      "webhookId": "evolution-ai-agent"
+    },
+    {
+      "parameters": {
+        "language": "javascript",
+        "code": "// Normaliza o payload vindo da Evolution API\nconst body = $json || {};\nconst data = body.data || body;\nconst key = data.key || {};\n\nconst rawEvent = body.event || data.event || body.type || '';\nconst event = String(rawEvent).toUpperCase().replace('.', '_');\nconst remoteJid = key.remoteJid || data.from || body.from || '';\nconst isGroup = typeof remoteJid === 'string' && remoteJid.includes('@g.us');\nconst fromMe = key.fromMe === true || data.fromMe === true;\nconst msg = data.message || {};\n\n// Detecta mídias específicas no payload da Evolution API / Baileys\nconst isImage = !!(msg.imageMessage || msg.ephemeralMessage?.message?.imageMessage || data.messageType === 'imageMessage');\nconst isDocument = !!(msg.documentMessage || msg.ephemeralMessage?.message?.documentMessage || data.messageType === 'documentMessage');\nconst isAudio = !!(msg.audioMessage || msg.ephemeralMessage?.message?.audioMessage || data.messageType === 'audioMessage');\nconst isVideo = !!(msg.videoMessage || msg.ephemeralMessage?.message?.videoMessage || data.messageType === 'videoMessage');\nconst isSticker = !!(msg.stickerMessage || msg.ephemeralMessage?.message?.stickerMessage || data.messageType === 'stickerMessage');\nconst isMedia = isImage || isDocument || isAudio || isVideo || isSticker;\n\nlet textRaw = msg.conversation || msg.extendedTextMessage?.text || msg.ephemeralMessage?.message?.conversation || msg.ephemeralMessage?.message?.extendedTextMessage?.text || data.text || '';\n\nif (!textRaw && isMedia) {\n  if (isImage) textRaw = '[Imagem]';\n  else if (isDocument) textRaw = '[Documento/PDF]';\n  else if (isAudio) textRaw = '[Áudio]';\n  else if (isVideo) textRaw = '[Vídeo]';\n  else if (isSticker) textRaw = '[Sticker]';\n  else textRaw = '[Mídia]';\n}\n\nconst text = String(textRaw || '').trim();\nconst phone = String(remoteJid || '').replace(/@.*$/, '').replace(/\\D/g, '');\nconst instance = body.instance?.instanceName || body.instance?.name || body.instanceName || data.instanceName || body.instance || 'teste-atendimento';\n\nconst shouldProcess = event === 'MESSAGES_UPSERT'\n  && !isGroup\n  && phone !== ''\n  && text !== ''\n  && !fromMe;\n\nreturn [{ \n  json: {\n    event,\n    from: remoteJid || data.from || body.from || 'unknown',\n    text,\n    text_raw: text,\n    phone,\n    isGroup,\n    fromMe,\n    is_self_test: false,\n    should_process: shouldProcess,\n    is_media: isMedia,\n    is_image: isImage,\n    is_document: isDocument,\n    instance,\n    raw: body\n  }\n}];"
+      },
+      "id": "Normalize",
+      "name": "Normalize",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {\n  ok: true,\n  event: $json.event || null,\n  from: $json.from || null,\n  instance: $json.instance || null\n} }}"
+      },
+      "id": "Respond",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        700,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.should_process}}",
+              "operation": "isTrue"
+            }
+          ]
+        }
+      },
+      "id": "If",
+      "name": "If",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        700,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH contato AS (\n  INSERT INTO app.app_contato (nome, telefone)\n  VALUES ('WhatsApp', $1)\n  ON CONFLICT (telefone) DO UPDATE SET telefone = EXCLUDED.telefone\n  RETURNING id\n),\ncontato_sel AS (\n  SELECT id FROM contato\n  UNION ALL\n  SELECT id FROM app.app_contato WHERE telefone = $1 LIMIT 1\n),\nsess AS (\n  INSERT INTO app.app_session (contato_id, canal, identificador_externo)\n  SELECT id, 'whatsapp', $1 FROM contato_sel\n  WHERE NOT EXISTS (\n    SELECT 1 FROM app.app_session s\n    JOIN contato_sel c ON s.contato_id = c.id\n    WHERE s.canal='whatsapp' AND s.identificador_externo=$1\n  )\n  RETURNING id, contato_id\n),\nsess_sel AS (\n  SELECT id, contato_id FROM sess\n  UNION ALL\n  SELECT s.id, s.contato_id FROM app.app_session s\n  JOIN contato_sel c ON s.contato_id = c.id\n  WHERE s.canal='whatsapp' AND s.identificador_externo=$1\n  LIMIT 1\n)\nINSERT INTO app.app_mensagem (session_id, contato_id, remetente, mensagem)\nSELECT id, contato_id, 'usuario', $2 FROM sess_sel;",
+        "values": "={{[$json.phone, $json.text]}}"
+      },
+      "id": "InsertUser",
+      "name": "InsertUser",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [
+        950,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $node.Normalize.json.text }}",
+        "systemMessage": "Você é um assistente virtual institucional útil e prestativo. Responda de forma clara, educada, concisa e direta às solicitações do usuário. Caso não saiba responder a alguma pergunta, recomende que ele solicite falar com um atendente humano."
+      },
+      "id": "AI Agent",
+      "name": "AI Agent",
+      "type": "n8n-nodes-langchain.agent",
+      "typeVersion": 1.6,
+      "position": [
+        1200,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "model": "phi3",
+        "ollamaUri": "http://ollama:11434"
+      },
+      "id": "Ollama Chat Model",
+      "name": "Ollama Chat Model",
+      "type": "n8n-nodes-langchain.lmChatOllama",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "sessionId": "={{ $node.Normalize.json.phone }}",
+        "contextKey": "chat_history"
+      },
+      "id": "Window Buffer Memory",
+      "name": "Window Buffer Memory",
+      "type": "n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.2,
+      "position": [
+        1300,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'http://evolution-api:8080/message/sendText/' + $node['Normalize'].json.instance }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"number\": \"={{$node.Normalize.json.phone}}\",\n  \"text\": \"={{ $('AI Agent').isExecuted ? $('AI Agent').json.output : \\\"Desculpe, sou um assistente virtual e no momento só consigo responder a mensagens de texto. Por favor, envie sua dúvida por texto escrito.\\\" }}\"\n}",
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "apikey",
+              "value": "change-me"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        }
+      },
+      "id": "SendReply",
+      "name": "SendReply",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH contato AS (\n  INSERT INTO app.app_contato (nome, telefone)\n  VALUES ('WhatsApp', $1)\n  ON CONFLICT (telefone) DO UPDATE SET telefone = EXCLUDED.telefone\n  RETURNING id\n),\ncontato_sel AS (\n  SELECT id FROM contato\n  UNION ALL\n  SELECT id FROM app.app_contato WHERE telefone = $1 LIMIT 1\n),\nsess AS (\n  INSERT INTO app.app_session (contato_id, canal, identificador_externo)\n  SELECT id, 'whatsapp', $1 FROM contato_sel\n  WHERE NOT EXISTS (\n    SELECT 1 FROM app.app_session s\n    JOIN contato_sel c ON s.contato_id = c.id\n    WHERE s.canal='whatsapp' AND s.identificador_externo=$1\n  )\n  RETURNING id, contato_id\n),\nsess_sel AS (\n  SELECT id, contato_id FROM sess\n  UNION ALL\n  SELECT s.id, s.contato_id FROM app.app_session s\n  JOIN contato_sel c ON s.contato_id = c.id\n  WHERE s.canal='whatsapp' AND s.identificador_externo=$1\n  LIMIT 1\n)\nINSERT INTO app.app_mensagem (session_id, contato_id, remetente, mensagem)\nSELECT id, contato_id, 'assistente', $2 FROM sess_sel;",
+        "values": "={{[$node.Normalize.json.phone, $('AI Agent').isExecuted ? $('AI Agent').json.output : \"Desculpe, sou um assistente virtual e no momento só consigo responder a mensagens de texto. Por favor, envie sua dúvida por texto escrito.\"]}}"
+      },
+      "id": "InsertAssistant",
+      "name": "InsertAssistant",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [
+        1750,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$node.Normalize.json.is_media}}",
+              "operation": "isTrue"
+            }
+          ]
+        }
+      },
+      "id": "If Media",
+      "name": "If Media",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1050,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize": {
+      "main": [
+        [
+          {
+            "node": "Respond",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "InsertUser",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "InsertUser": {
+      "main": [
+        [
+          {
+            "node": "If Media",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "SendReply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SendReply": {
+      "main": [
+        [
+          {
+            "node": "InsertAssistant",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ollama Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Window Buffer Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Media": {
+      "main": [
+        [
+          {
+            "node": "SendReply",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true
+  }
+}
