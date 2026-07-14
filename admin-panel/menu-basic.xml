@@ -70,6 +70,20 @@
               </menuitem>
         </menu>
     </menuitem>
+
+    <menuitem label='Bots'>
+        <icon>fas:robot fa-fw</icon>
+        <menu>
+            <menuitem label='Listar Bots'>
+                <icon>fas:list fa-fw</icon>
+                <action>AppBotList</action>
+            </menuitem>
+            <menuitem label='FAQ dos Bots'>
+                <icon>fas:question-circle fa-fw</icon>
+                <action>AppBotFaqList</action>
+            </menuitem>
+        </menu>
+    </menuitem>
         
     <menuitem label='Common pages'>
         <menu>
