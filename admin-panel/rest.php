@@ -13,7 +13,7 @@ class AdiantiRestServer
         $class    = isset($request['class']) ? $request['class']   : '';
         $method   = isset($request['method']) ? $request['method'] : '';
         $response = NULL;
-        
+
         // aqui implementar mecanismo de controle !!
         if (get_parent_class($class) !== 'Adianti\Service\AdiantiRecordService')
         {
@@ -21,7 +21,7 @@ class AdiantiRestServer
             return json_encode( array('status' => 'error',
                                       'data'   => _t('Permission denied')));
         }
-        
+
         try
         {
             $response = AdiantiCoreApplication::execute($class, $method, $request, 'rest');

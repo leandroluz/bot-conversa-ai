@@ -15,9 +15,9 @@ class AdiantiRestServer
         $method   = isset($request['method']) ? $request['method'] : '';
         $headers  = AdiantiCoreApplication::getHeaders();
         $response = NULL;
-        
+
         $headers['Authorization'] = $headers['Authorization'] ?? ($headers['authorization'] ?? null); // for clientes that send in lowercase (Ex. futter)
-        
+
         try
         {
             if (empty($headers['Authorization']))
@@ -42,7 +42,7 @@ class AdiantiRestServer
                         {
                             throw new Exception( _t('REST key not defined') );
                         }
-                        
+
                         if ($ini['general']['rest_key'] !== substr($headers['Authorization'], 6))
                         {
                             http_response_code(401);
@@ -60,7 +60,7 @@ class AdiantiRestServer
                     throw new Exception( _t('Authorization error') );
                 }
             }
-            
+
             $response = AdiantiCoreApplication::execute($class, $method, $request, 'rest');
             if (is_array($response))
             {
